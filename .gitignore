@@ -1,6 +1,7 @@
-flies-eps-converted-to.pdf
-fly-eps-converted-to.pdf
-sigproc-sp.pdf
+report.pdf
+*-eps-converted-to.pdf
 *.aux
 *.log
 *.blg
+*.fdb_latexmk
+*.fls
