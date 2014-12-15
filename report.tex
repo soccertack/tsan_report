@@ -128,7 +128,7 @@ The motivation of our work comes from the real world need to specify bug severit
 
 
 \subsection{Vulnerability Window}
-A vulnerability window is the interval between two memory accesses to the same location that should be atomic but it is not. We say that two accesses are atomic if they are never interleaved by another thread’s access in a unserializable way. The AVIO paper [Cite AVIO paper] describes which interleavings are serializable and which are not.
+A vulnerability window is the interval between two memory accesses to the same location that should be atomic but it is not. We say that two accesses are atomic if they are never interleaved by another thread's access in a unserializable way. The AVIO paper [Cite AVIO paper] describes which interleavings are serializable and which are not.
 
 Every concurrent application defines code regions that are expected to be atomic. The programmers are responsible for enforcing the isolation of these code regions from any unserializable interleavings by means of synchronization (i.e. locks, barriers, semaphores, and transactions). A failure to enforce this isolation is called a concurrency bug and creates a vulnerability window. A vulnerability window can be exploited by an attacker to cause the program to deviate from its correct behavior, and the bigger its size, the easier for the attacker to successfully exploit the bug. In this project we are only concerned with the size of the vulnerability window. A further study on the possible ways to break the security of the application by means of a vulnerability window is left for future work.
 
@@ -137,7 +137,7 @@ Every concurrent application defines code regions that are expected to be atomic
 The goal of this project is to add information about the vulnerability window to a ThreadSanitizer data race report. This information can then help developers find out the severity of each data race by informing how large the vulnerability window is, or can be. We propose a modified version of ThreadSanitizer and some tools that partially achieves this goal. We understand that there are many ways to improve our tools and we consider this project a first step toward successfully accomplishing the goal.
 
 \subsection{ThreadSanitizer and Data Races}
-ThreadSanitizer is a fast open-source happens-before data race detector developed by Google [Cite ThreadSanitizer]. It performs dynamic analysis and reports data races in C/C++ and Go applications. An application has a data race when two of its threads performs unsynchronized accesses to the same memory location. Because of its happens-before approach, no false positive is reported [Cite ThreadSanitizer], so every reported race is real or a bug in the tool. ThreadSanitizer’s execution time overhead is 2-20x, and its memory usage overhead is 5-10x. This overhead is considered acceptable for many applications, and that is why ThreadSanitizer has been used by many projects inside and outside Google (i.e. Chromium, Firefox).
+ThreadSanitizer is a fast open-source happens-before data race detector developed by Google [Cite ThreadSanitizer]. It performs dynamic analysis and reports data races in C/C++ and Go applications. An application has a data race when two of its threads performs unsynchronized accesses to the same memory location. Because of its happens-before approach, no false positive is reported [Cite ThreadSanitizer], so every reported race is real or a bug in the tool. ThreadSanitizer's execution time overhead is 2-20x, and its memory usage overhead is 5-10x. This overhead is considered acceptable for many applications, and that is why ThreadSanitizer has been used by many projects inside and outside Google (i.e. Chromium, Firefox).
 
 According to C++ standard, C standard, POSIX, Go memory model and other standards, any data race is undefined behavior [Cite Intel benign race]. This means that a compiler can assume that accesses without synchronization can be subject to optimizations that could result in code that does not faithfully represents the source code. This also means that code that contains data races can behavior differently from one compiler to another. There are many resources that explains why there is no benign data races in these languages [Cite …], so fixing all data races is recommended. 
 
@@ -145,17 +145,22 @@ One interesting aspect of a data race bug is that it does not need to cause the 
 
 The following image is an example of a ThreadSanitizer data race report. A report always contains the follow information: the current and previous accesses that are not synchronized, their operation, source-code location, size, memory location, thread and what mutexes were held at the time of each access.
 
+\begin{figure}
+\centering
+\epsfig{file=images/tsan_output.eps, width=\linewidth,}
+\caption{ThreadSanitizer output}
+\end{figure}
 
 \subsection{Approaches}
 In order to associate the vulnerability window information to each race report, we need to first find the vulnerability window associated with the report. For this step, we sticked to the idea suggested by Professor Junfeng of using the next access to the racy location by each of the reported threads. To achieve this, we tried two different approaches: 
 Perform static analysis to find the next access after the racy locations reported:
-	In this approach we search for another access to the same racy location reported nearby the racy instruction using LLVM’s Alias Analysis.
+	In this approach we search for another access to the same racy location reported nearby the racy instruction using LLVM's Alias Analysis.
 	Modifying ThreadSanitizer to provide the next access location in each thread:
 		In this approach we modify ThreadSanitizer to give us the position of the next access to the racy location previously reported in each of the threads in the report.
 
 		After identifying the vulnerability window associated with each report, the next step is to measure how large this window is, or can be. In order to do this, we tried two different approaches:
 		Doing dynamic data flow analysis to find input-controlled variables that could increase the size of the vulnerability window:
-		In this approach we use LLVM’s DataFlowSanitizer to keep track of which memory locations are influenced by input and uses this information to reason about how the vulnerability window can be made larger.
+		In this approach we use LLVM's DataFlowSanitizer to keep track of which memory locations are influenced by input and uses this information to reason about how the vulnerability window can be made larger.
 		Further modifying ThreadSanitizer to provide dynamic vulnerability window information:
 			In this approach we modify ThreadSanitizer to give us information like total amount of memory allocated and time of report to later use it to determine how large the window is.
 
@@ -170,12 +175,32 @@ Our second approach is to modify threadsanitizer. As mentioned earlier, this is 
 
 Threadsanitizer reports only the first race by default, so we need to get subsequent accesses to form a vulnerability window. In the example of figure x, Threadsanitizer will only report the race between access 1 and access 2. For other races to be reported, we did two things. First, we make subsequent accesses in the same thread reported. Apparently, accesses in the same thread have happens-before relationship, and they are not reported. To make it reported, we keep a list of racy locations. If there is an access to one of the racy locations in the list, then we make this access to bypass happens-before relationship check. This modification enables to report a race between access 1 and access 4. Secondly, we make subsequent accesses in the different threads reported. This can be done with what we did for the same thread. However, threadsanitizer already have an option to enable this. We set  “suppress\_equal\_addresses” flag to false in threadsanitizer, and then races between different threads for the same address is reported. In this example, races between (access 1 and access 3) and (access 1 and access 5) are reported.
 
+\begin{figure}
+\centering
+\epsfig{file=images/thread_accesses.eps, width=2in,}
+\caption{Accesses to the same memory location from threads}
+\end{figure}
+
+
 Now that we have the instructions to form the window, we modified ThreadSanitizer to get information on the size of the window. To do that, we made ThreadSanitizer print the current timestamp in nanosecond scale with each access. Simply, the size of a window will be time difference between the beginning and the end of a window. To anticipate possible window size, we need to detect certain operations which might take long time under some condition. e.g. memory allocations, file operations, synchronization operations. Threadsanitizer already intercepts these operations. (refer to Appendix) For this project, we made ThreadSanitizer to print the size of allocated memory for each access so that we can compare the value at the beginning of a window to the value at the end. Similarly, we can do the same thing for file operations and synchronization operations as well.
 
-After we get information of accesses, we do post-processing. The biggest reason is that threadsanitizer prints out the race reports as soon as it detects, so reordering should be done either at the end of threadsanitizer or at a different post-processor after the program is terminated. We found that modifying threadsanitizer further would not be productive. ThreadSanitizer imposes several restrictions that complicates development, for example, it has it’s own memory allocation mechanism only allowed for predefined data types and cannot use the standard library. 
+After we get information of accesses, we do post-processing. The biggest reason is that threadsanitizer prints out the race reports as soon as it detects, so reordering should be done either at the end of threadsanitizer or at a different post-processor after the program is terminated. We found that modifying threadsanitizer further would not be productive. ThreadSanitizer imposes several restrictions that complicates development, for example, it has it's own memory allocation mechanism only allowed for predefined data types and cannot use the standard library. 
 
 \subsection{Post-processing}
-In the post processing, we form the vulnerability windows and order them. To form a window, post processor keeps all the access for each racy location, and make a window between accesses of the same thread. Figure xxx shows the data structure of post processor. While parsing the result from threadsanitizer, for each access, post processor stores information such as thread id, timestamp, memory access per location. In figure xxx, address 0xabcd has four different accesses. A window is formed whenever there are more than one accesses from the same thread. For the address 0xabcd, thread 1 forms a window, and it’s size is 10ms which is determined by the time difference. Once the post processor parsed the whole result, then it reorders windows by size. Figure xxx is the typical output of post processor. It gives variable name, line number and thread id as well as window size, so with these information, developers can fix problems in the order of importance.
+In the post processing, we form the vulnerability windows and order them. To form a window, post processor keeps all the access for each racy location, and make a window between accesses of the same thread. Figure xxx shows the data structure of post processor. While parsing the result from threadsanitizer, for each access, post processor stores information such as thread id, timestamp, memory access per location. In figure xxx, address 0xabcd has four different accesses. A window is formed whenever there are more than one accesses from the same thread. For the address 0xabcd, thread 1 forms a window, and it's size is 10ms which is determined by the time difference. Once the post processor parsed the whole result, then it reorders windows by size. Figure xxx is the typical output of post processor. It gives variable name, line number and thread id as well as window size, so with these information, developers can fix problems in the order of importance.
+
+\begin{figure}
+\centering
+\epsfig{file=images/preprocessor.eps, width=\linewidth,}
+\caption{Preprocessor data structure}
+\end{figure}
+
+\begin{figure}
+\centering
+\epsfig{file=images/reorder.eps, width=\linewidth,}
+\caption{Output of Preprocessor}
+\end{figure}
+
 
 \subsection{Data Flow Analysis}
 Our data flow analysis implementation makes use of the data flow sanitizer distributed with LLVM. This sanitizer provides an interface that allow users to set, get and check the labels associated with variables, making it easy for developers to add data flow analysis to their application. Figure … shows the sanitizer interface. The Data Flow Sanitizer is actually still under development, but seems to be work for our sample programs. We chose to use it because it is the only data flow analysis implementation we know of, and implementing it on our own is out of the scope of this project.
@@ -188,12 +213,26 @@ Checks whether [addr, addr+size] is dependent on input. It prints the result to 
 dfrtl\_add\_input\_label(addr, size)
 	Label [addr, addr+size] as input. Used to say what is considered input by the application.
 
-	As we are only concerned about the code inside the vulnerability window, our instrumentation component needs as input the vulnerability window begin and end locations, which it receives from our post-process script. With these locations, the tool uses the debug information inserted by the compiler (with the ‘-g’ flag) to find the associated instructions and then follows every possible path from the begin of window instruction until the end of the window instruction. In this pass, it collects the instruction that should had its operands checked for input dependence.
+	As we are only concerned about the code inside the vulnerability window, our instrumentation component needs as input the vulnerability window begin and end locations, which it receives from our post-process script. With these locations, the tool uses the debug information inserted by the compiler (with the '-g' flag) to find the associated instructions and then follows every possible path from the begin of window instruction until the end of the window instruction. In this pass, it collects the instruction that should had its operands checked for input dependence.
 
 	Since our focus is to find input-controlled vulnerability window, we should check every instruction that could make the vulnerability window larger. In the limited time we had, we only implemented the instrumentation that checks whether a loop header condition is dependent on the input or not, giving us an idea of loops that can take longer because of input.
 
+\begin{figure}
+\centering
+\epsfig{file=images/dflow.eps, width=\linewidth,}
+\caption{DataFlowSanitizer Interface}
+\end{figure}
+
 \subsection{Tools Overview}
+
 Figure … illustrates how the tools implemented work together. It starts by compiling the application with our modified ThreadSanitizer, which when run will output race reports. The reports are then processed by our post processing phase which forms the vulnerability window and pass it to the data flow tool, which will instrument, compile and run the application, outputting any cases where the input influences the vulnerability window. Our post processing phase is to back scene again to use this result and finally reorder the reports by size of the vulnerability window.
+
+\begin{figure}
+\centering
+\epsfig{file=images/tooloverview.eps, width=\linewidth,}
+\caption{Tool Overview}
+\end{figure}
+
 
 \section{Evaluation}
 Typically, thetion of our tools was limited to just checking if it is working for simple toy examples. Even though we tried, we were not able to run big systems with ThreadSanitizer (i.e. Apache, Chromium, Firefox). We found it very hard to correctly modify the build process of these systems to use ThreadSanitizer, and for every single one of our tries we failed at some point. Nonetheless, we were able to use it for the examples we created, demonstrating that the problem was our limited knowledge of building very large systems. None of us have ever developed a system that required a complicated build process like the ones we tried.
@@ -211,7 +250,7 @@ Unfortunately, DataFlowSanitizer is still under development and does not yet sup
 
 
 \section{Related Works}
-This project was motivated by the paper Concurrency Attacks from Junfeng Yang et al. [Cite Junfeng], where many ideas came from. We are not aware of any other work that used the size of the vulnerability window as an indicative of the priority of a concurrency error. A similar work but with a different motivation have been previously done on measuring the probability of unserializable interleavings [Cite CTrigger]. In the CTrigger paper [Cite Ctrigger], they call a vulnerability window a ‘gap’ and they use profiling-run traces to identify those gaps, similar to how we got the time to execute the vulnerability window by modifying ThreadSanitizer to give us the time at the begin and end. We are not aware of any work about input-controlled vulnerability windows.
+This project was motivated by the paper Concurrency Attacks from Junfeng Yang et al. [Cite Junfeng], where many ideas came from. We are not aware of any other work that used the size of the vulnerability window as an indicative of the priority of a concurrency error. A similar work but with a different motivation have been previously done on measuring the probability of unserializable interleavings [Cite CTrigger]. In the CTrigger paper [Cite Ctrigger], they call a vulnerability window a 'gap' and they use profiling-run traces to identify those gaps, similar to how we got the time to execute the vulnerability window by modifying ThreadSanitizer to give us the time at the begin and end. We are not aware of any work about input-controlled vulnerability windows.
 
 Our work focused on finding the vulnerability window associated with a data race report from ThreadSanitizer. Another approach would be to generalize to not only handle data races, but other concurrency errors too. An invariant-based atomicity bugs detector like AVIO [Cite AVIO] could be used instead of ThreadSanitizer for this goal. One benefit of using an invariant-based approach is that it already gives us the vulnerability window, since it is not predictive as the happens-before approach, saving us from the problems that we found when trying to find the vulnerability window. 
 
