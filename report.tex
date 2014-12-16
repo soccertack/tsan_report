@@ -263,7 +263,12 @@ Our work focused on finding the vulnerability window associated with a data race
 
 \section{Conclusion}
 
-LLVM is helpful (LLVM IR and infrastructure), but its library are still not mature.
+The project was very instructive and got us to learn a lot about the LLVM infrastructure. It provided us with insights on how to do data flow analysis, static analysis and data race detection.  Unfortunately, LLVM is far from stable. Our work in two months already needs changes to be able to compile with the last LLVM development version. This is also represented on the fact that the documentation is usually the code, which took us a good amount of time to get started. Furthermore, we encountered many incomplete implementations along the way, like the alias analysis and the data flow sanitizer, which are still under development.
+
+Reading ThreadSanitizer code was also very interesting and introduced us to unusual ways to speed up the runtime library of a dynamic analysis tool. It demonstrates what it takes to achieve practical overhead in dynamic analysis.
+
+Unfortunately, our beginner knowledge of the area, the fact that LLVM is not stable, and our problems with building large systems prevented us to advance much further in the goal proposed for the project. We although believe that the project was successful in providing us opportunity to build tools that perform static and dynamic analysis, which is a valuable experience for learning about reliable systems.
+
 
 % The following two commands are all you need in the
 % initial runs of your .tex file to
