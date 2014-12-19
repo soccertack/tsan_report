@@ -92,11 +92,6 @@ Jintack Lim\\
 % number that will appear in the \additionalauthors section.
 
 \maketitle
-\begin{abstract}
-
-abstract...
-
-\end{abstract}
 
 \section{Introduction}
 
@@ -246,7 +241,7 @@ Our static alias analysis attempt to form the vulnerability windows failed to ac
 
 \subsection{Modified ThreadSanitizer and Postprocessing}
 
-Our modification of ThreadSanitizer and postprocessor successfully gives the vulnerability windows, its sizes and allocated memory sizes if any. Figure \ref{fig:preprocessorOutput} is the result from the postprocessor. To evaluate our work, we need to run our tool on the real world programs. This attempts were not so successful. We first tried to reproduce existing bugs with Threadsanitizer. However, the versions of software are quite old (like mysql 4.x), so while compiling those programs we kept meeting mysterious errors, and we never succeeded. Another approach we took is to work on Chromium which is known to be tested with ThreadSanitizer. We compiled it and ran it, but simply surfing the web did not give any race report. We also tried to reproduce known Chroimium races in its unit tests, but we got some runtime errors which prevent us to run it thoroughly. 
+Our modification of ThreadSanitizer and postprocessor successfully gives the vulnerability windows, its sizes and allocated memory sizes if any. Figure \ref{fig:preprocessorOutput} is the result from the postprocessor. To evaluate our work, we need to run our tool on the real world programs. This attempts were not so successful. We first tried to reproduce existing bugs with Threadsanitizer. However, the versions of software are quite old (like mysql 4.x), so while compiling those programs we kept meeting mysterious errors, and we never succeeded. Another approach we took is to work on Chromium which is known to be tested with ThreadSanitizer. We compiled it and ran it, but simply surfing the web did not give any race report. We also tried to reproduce known Chroimium races in its unit tests\cite{chromiumbug}, but we got some runtime errors which prevent us to run it thoroughly. 
 
 \subsection{Data Flow Analysis}
 
